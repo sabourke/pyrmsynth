@@ -27,7 +27,7 @@ cd rm_tools
 python setup.py install --user
 ```
 
-Copy the pyrmsynth_lite.py program to a directory in your path.
+Copy the `pyrmsynth_lite.py` program to a directory in your path.
 ```
 mkdir -p ~/.local/bin
 cp pyrmsynth_lite.py ~/.local/bin
@@ -36,7 +36,7 @@ cp pyrmsynth_lite.py ~/.local/bin
 
 ## Usage
 ```
-python rmsynthesis.py <parfile> QU_cube.fits
+pyrmsynth_lite.py <parfile> QU_cube.fits
 ```
 
 By default, `pyrmsynth_lite` outputs only the 2D maps. To save the qubes,
