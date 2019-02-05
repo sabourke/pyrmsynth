@@ -30,7 +30,6 @@ python setup.py install --user
 Copy the pyrmsynth_lite.py program to a directory in your path.
 ```
 mkdir -p ~/.local/bin
-chmod a+x pyrmsynth_lite.py
 cp pyrmsynth_lite.py ~/.local/bin
 ```
 
