@@ -176,6 +176,9 @@ def main():
     parser.add_option("-x", "--exclude_phi", metavar='phi_range', nargs=2,
                       type=float, default=(0,0), 
                       help="exclude this range from moment maps. Eg: -3 1.5")
+    parser.add_option("-n", "--phi_rms", metavar='phi_rms_range', nargs=2,
+                      type=float, default=(0,0), 
+                      help="Make an RMS image from this range. Eg: 100 115")
 
     (options, args) = parser.parse_args()
 
@@ -284,6 +287,22 @@ def main():
         if attr in header:
             del header[attr]
 
+    hdu.data = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA]), dtype=data_out.real.dtype)
+
+    # RMS Image
+    if options.phi_rms[0] != options.phi_rms[1]:
+        phi0_idx = np.abs(params.phi - options.phi_rms[0]).argmin()
+        phi1_idx = np.abs(params.phi - options.phi_rms[1]).argmin()
+        x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
+        print("RMS phi range: {} => {}".format(options.phi_rms, x_phi))
+        q_rms = data_out[:,x_phi[0]:x_phi[1]].real.std(axis=1)
+        u_rms = data_out[:,x_phi[0]:x_phi[1]].imag.std(axis=1)
+        p_rms = 0.5 * (q_rms + u_rms)
+
+        hdu.data[data_selection] = p_rms
+        print "Saving rms map"
+        hdu.writeto(params.outputfn + "_rms.fits", overwrite=True)
+
     # Exclude range:
     if options.exclude_phi[0] != options.exclude_phi[1]:
         phi0_idx = np.abs(params.phi - options.exclude_phi[0]).argmin()
@@ -291,8 +310,6 @@ def main():
         x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
         print("Excluding phi range: {} => {}".format(options.exclude_phi, x_phi))
         data_out[:,x_phi[0]:x_phi[1]] = 0
-
-    hdu.data = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA]), dtype=data_out.real.dtype)
 
     hdu.data[data_selection] = np.amax(abs(data_out), axis=-1)
     print "Saving int pol map"
