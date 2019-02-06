@@ -53,6 +53,8 @@ Options:
   -a, --auto-flag      auto flag data
   -x phi_range, --exclude_phi=phi_range
                         exclude this range from moment maps. Eg: -3 1.5
+  -n phi_rms_range, --phi_rms=phi_rms_range
+                        Make an RMS image from this range. Eg: 100 115
 ```
 
 A utility called `mask_map.py` is included to make masks based on a cutoff
