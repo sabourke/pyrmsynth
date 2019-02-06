@@ -173,6 +173,9 @@ def main():
     parser.add_option("-a", "--auto-flag", action="store_true",
                       dest="auto_flag",
                       help="auto flag data", default=False)
+    parser.add_option("-x", "--exclude_phi", metavar='phi_range', nargs=2,
+                      type=float, default=(0,0), 
+                      help="exclude this range from moment maps. Eg: -3 1.5")
 
     (options, args) = parser.parse_args()
 
@@ -280,6 +283,14 @@ def main():
         attr += "3"
         if attr in header:
             del header[attr]
+
+    # Exclude range:
+    if options.exclude_phi[0] != options.exclude_phi[1]:
+        phi0_idx = np.abs(params.phi - options.exclude_phi[0]).argmin()
+        phi1_idx = np.abs(params.phi - options.exclude_phi[1]).argmin()
+        x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
+        print("Excluding phi range: {} => {}".format(options.exclude_phi, x_phi))
+        data_out[:,x_phi[0]:x_phi[1]] = 0
 
     hdu.data = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA]), dtype=data_out.real.dtype)
 

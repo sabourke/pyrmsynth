@@ -51,6 +51,8 @@ Options:
   -p, --save-pol-cube  Save Pol cube
   -q, --save-qu-cubes  Save derotated Q and U cubes
   -a, --auto-flag      auto flag data
+  -x phi_range, --exclude_phi=phi_range
+                        exclude this range from moment maps. Eg: -3 1.5
 ```
 
 A utility called `mask_map.py` is included to make masks based on a cutoff
