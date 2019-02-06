@@ -1,4 +1,4 @@
-#!/home/sbourke/sw/surveys/bin/python
+#!/usr/bin/env python
 
 """
 pyrmsynth_lite, Stephen Bourke
