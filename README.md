@@ -6,7 +6,7 @@ It should be much faster than standard `pyrmsynth`
 for masked data and slightly faster for full cube synthesis.
 
 Only the main `pyrmsynth` routine is modified. `pyrmsynth_lite` uses
-the same code to do the actual RM synthesis. The speed up is achived
+the same code to do the actual RM synthesis. The speed-up is achived
 by optimising the memory access pattern.
 
 For development and testing the RM-Clean capability was removed. This
@@ -39,7 +39,7 @@ cp pyrmsynth_lite.py ~/.local/bin
 pyrmsynth_lite.py <parfile> QU_cube.fits
 ```
 
-By default, `pyrmsynth_lite` outputs only the 2D maps. To save the qubes,
+By default, `pyrmsynth_lite` outputs only the 2D maps. To save the cubes,
 use the command line options as listed below.
 
 `pyrmsynth_lite` includes an auto-flagging rountine as developed by G. Heald.
