@@ -19,7 +19,7 @@ import sys
 VERSION = "0.1"
 
 import astropy.version
-if astropy.version.major < 2 and astropy.version.minor < 3:
+if astropy.version.major < 1 or astropy.version.major < 2 and astropy.version.minor < 3:
     USE_CLOBBER = True
 else:
     USE_CLOBBER = False
