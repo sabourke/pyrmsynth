@@ -164,6 +164,8 @@ def main():
 
     parser = OptionParser(usage="%prog <input parameter file>",
                           version="%prog " + VERSION)
+    parser.add_option("-o", "--outname", type=str,
+                      help="output prefix")
     parser.add_option("-p", "--save-pol-cube", action="store_true",
                       dest="save_pol_cube",
                       help="Save Pol cube", default=False)
@@ -187,6 +189,9 @@ def main():
 
     print "Parsing parameter file..."
     params = parse_input_file(args[0])
+
+    if options.outname:
+        params.outputfn = options.outname
 
     timing = []
     timing.append(tic())

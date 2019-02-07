@@ -48,6 +48,8 @@ To enable it see the command line options below.
 
 Options:
 ```
+  -o OUTNAME, --outname=OUTNAME
+                        output prefix
   -p, --save-pol-cube  Save Pol cube
   -q, --save-qu-cubes  Save derotated Q and U cubes
   -a, --auto-flag      auto flag data
