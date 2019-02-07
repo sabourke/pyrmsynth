@@ -18,6 +18,12 @@ import sys
 
 VERSION = "0.1"
 
+import astropy.version
+if astropy.version.major < 2 and astropy.version.minor < 3:
+    USE_CLOBBER = True
+else:
+    USE_CLOBBER = False
+
 
 class Params:
     def __init__(self):
@@ -220,9 +226,9 @@ def main():
     (DEC,RA,FREQ,STOKES) = range(4)
 
     data_selection = np.where(mask)
-    data_sel = data[data_selection]
+    non_masked_data = data[data_selection]
     # Unflagged NaNs will cause RMSynth to return NaNs
-    data_sel = np.nan_to_num(data_sel.view(dtype=">c8").squeeze()).astype(np.complex128)
+    non_masked_data = np.nan_to_num(non_masked_data.view(dtype=">c8").squeeze()).astype(np.complex128)
     
     params.nu = freqs(header, 4)
     params.dnu = params.nu[1] - params.nu[0]
@@ -236,12 +242,12 @@ def main():
 
     timing.append(tic())
 
-    data_out = np.empty(shape=(len(data_sel), params.nphi), dtype=np.complex128)
+    data_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=np.complex128)
     print "Doing RM synthesis"
-    n = len(data_sel)
+    n = len(non_masked_data)
     width = len(str(n))
-    for i in range(len(data_sel)):
-        data_out[i] = rms.compute_dirty_image(data_sel[i]) 
+    for i in range(len(non_masked_data)):
+        data_out[i] = rms.compute_dirty_image(non_masked_data[i]) 
         if i % 100 == 0:
             progress(20, 100.0 * i / n)
     print ""
@@ -266,7 +272,10 @@ def main():
         cube_out = np.moveaxis(cube_out, -1, 0)
         hdu.data = cube_out
         print "Saving phi cube"
-        hdu.writeto(params.outputfn + "_di_p.fits", overwrite=True)
+        if USE_CLOBBER:
+            hdu.writeto(params.outputfn + "_di_p.fits", clobber=True)
+        else:
+            hdu.writeto(params.outputfn + "_di_p.fits", overwrite=True)
 
         del cube_out
     
@@ -276,14 +285,20 @@ def main():
         cube_out = np.moveaxis(cube_out, -1, 0)
         hdu.data = cube_out
         print "Saving q cube"
-        hdu.writeto(params.outputfn + "_di_q.fits", overwrite=True)
+        if USE_CLOBBER:
+            hdu.writeto(params.outputfn + "_di_q.fits", clobber=True)
+        else:
+            hdu.writeto(params.outputfn + "_di_q.fits", overwrite=True)
     
         cube_out = np.moveaxis(cube_out, 0, -1)
         cube_out[data_selection] = data_out.imag
         cube_out = np.moveaxis(cube_out, -1, 0)
         hdu.data = cube_out
         print "Saving u cube"
-        hdu.writeto(params.outputfn + "_di_u.fits", overwrite=True)
+        if USE_CLOBBER:
+            hdu.writeto(params.outputfn + "_di_u.fits", clobber=True)
+        else:
+            hdu.writeto(params.outputfn + "_di_u.fits", overwrite=True)
     
         del cube_out
     
@@ -306,7 +321,10 @@ def main():
 
         hdu.data[data_selection] = p_rms
         print "Saving rms map"
-        hdu.writeto(params.outputfn + "_rms.fits", overwrite=True)
+        if USE_CLOBBER:
+            hdu.writeto(params.outputfn + "_rms.fits", clobber=True)
+        else:
+            hdu.writeto(params.outputfn + "_rms.fits", overwrite=True)
 
     # Exclude range:
     if options.exclude_phi[0] != options.exclude_phi[1]:
@@ -318,21 +336,33 @@ def main():
 
     hdu.data[data_selection] = np.amax(abs(data_out), axis=-1)
     print "Saving int pol map"
-    hdu.writeto(params.outputfn + "_polint.fits", overwrite=True)
+    if USE_CLOBBER:
+        hdu.writeto(params.outputfn + "_polint.fits", clobber=True)
+    else:
+        hdu.writeto(params.outputfn + "_polint.fits", overwrite=True)
 
     indx_max = np.argmax(abs(data_out), axis=-1)
     hdu.data[data_selection] = data_out.real[range(len(data_out)), indx_max]
     print "Saving q map"
-    hdu.writeto(params.outputfn + "_qmap.fits", overwrite=True)
+    if USE_CLOBBER:
+        hdu.writeto(params.outputfn + "_qmap.fits", clobber=True)
+    else:
+        hdu.writeto(params.outputfn + "_qmap.fits", overwrite=True)
     
     hdu.data[data_selection] = data_out.imag[range(len(data_out)), indx_max]
     print "Saving u map"
-    hdu.writeto(params.outputfn + "_umap.fits", overwrite=True)
+    if USE_CLOBBER:
+        hdu.writeto(params.outputfn + "_umap.fits", clobber=True)
+    else:
+        hdu.writeto(params.outputfn + "_umap.fits", overwrite=True)
     
     header["BUNIT"] = "rad/m/m"
     hdu.data[data_selection] = params.phi[indx_max]
     print "Saving phi map"
-    hdu.writeto(params.outputfn + "_phi.fits", overwrite=True)
+    if USE_CLOBBER:
+        hdu.writeto(params.outputfn + "_phi.fits", clobber=True)
+    else:
+        hdu.writeto(params.outputfn + "_phi.fits", overwrite=True)
     
     timing.append(tic())
 
