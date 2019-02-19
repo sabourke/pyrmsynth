@@ -14,6 +14,7 @@ Additional features over standard `pyrmsynth`:
 - Save output in single or double precision format
 - Use an input mask to specify areas to do RMCLEAN
 - RMCLEAN down to a factor of the Phi noise
+- Create a mask on the fly from a Stokes I image and cutoff value.
 
 ## Installing
 
@@ -44,7 +45,7 @@ By default, `pyrmsynth_lite` outputs only the 2D maps. To save the cubes, use th
 Default behaviour is to use double precision internally and save output as single precision. This can be modifiled with the `--single` and `--double` command line arguments.
 ```
 usage: pyrmsynth_lite.py [-h] [-o OUTNAME] [-p] [-q] [-r] [-d] [-a]
-                         [-x phi_range phi_range]
+                         [-m AUTO_MASK AUTO_MASK] [-x phi_range phi_range]
                          [-n phi_rms_range phi_rms_range] [--single]
                          [--double] [--rmclean-mask RMCLEAN_MASK]
                          [--rmclean-sigma RMCLEAN_SIGMA]
@@ -53,7 +54,7 @@ usage: pyrmsynth_lite.py [-h] [-o OUTNAME] [-p] [-q] [-r] [-d] [-a]
 Rotation Measure Synthesis tool.
 
 positional arguments:
-  param_file            Optional input Parameter file
+  param_file            Input Parameter file
   fits_cube             QU FITS cube
 
 optional arguments:
@@ -67,6 +68,10 @@ optional arguments:
   -d, --save-dirty-cubes
                         Save dirty cubes if cleaning
   -a, --auto-flag       auto flag data
+  -m AUTO_MASK AUTO_MASK, --auto-mask AUTO_MASK AUTO_MASK
+                        Use stokes I map and cutoff value in Jy. This is in
+                        addition to a regular mask. I.E. it is OR'd with the
+                        regular mask if provided. Eg. map_i.fits 0.001
   -x phi_range phi_range, --exclude-phi phi_range phi_range
                         Exclude this Phi range from 2D maps. Eg: -3 1.5
   -n phi_rms_range phi_rms_range, --phi-rms phi_rms_range phi_rms_range
@@ -80,6 +85,7 @@ optional arguments:
   --rmclean-sigma RMCLEAN_SIGMA
                         Clean to RMCLEAN_SIGMA times the phi noise. This is
                         used in combination with the cutoff value. Eg. 10
+
 ```
 A utility called `mask_map.py` is included to make masks based on a cutoff value in Janskys. This is inteded to be used with a Stokes I map that corresponds to the cube that will be processed. E.g.:
 ```

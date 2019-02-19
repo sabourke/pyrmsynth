@@ -199,6 +199,8 @@ def main():
                         help="Save dirty cubes if cleaning")
     parser.add_argument("-a", "--auto-flag", action="store_true",
                         dest="auto_flag", help="auto flag data", default=False)
+    parser.add_argument("-m", "--auto-mask", dest="auto_mask", type=str, nargs=2,
+                        help="Use stokes I map and cutoff value in Jy. This is in addition to a regular mask. I.E. it is OR'd with the regular mask if provided. Eg. map_i.fits 0.001")
     parser.add_argument("-x", "--exclude-phi", dest="exclude_phi",
                         metavar='phi_range', nargs=2, type=float, default=(0,0), 
                         help="Exclude this Phi range from 2D maps. Eg: -3 1.5")
@@ -213,7 +215,7 @@ def main():
     parser.add_argument("--rmclean-sigma", dest="rmclean_sigma",
                         type=float, default=0.0,
                         help="Clean to RMCLEAN_SIGMA times the phi noise. This is used in combination with the cutoff value. Eg. 10")
-    parser.add_argument("param_file", type=str, help="Optional input Parameter file")
+    parser.add_argument("param_file", type=str, help="Input Parameter file")
     parser.add_argument("fits_cube", type=str, help="QU FITS cube")
 
     args = parser.parse_args()
@@ -242,6 +244,16 @@ def main():
         mask = fits.open(params.imagemask)[0].data.squeeze().astype(bool)
     else:
         mask = np.ones(shape=data.shape[2:], dtype=bool)
+    if args.auto_mask:
+        stokesI_map = fits.open(args.auto_mask[0])[0].data.squeeze()
+        cutoff = float(args.auto_mask[1])
+        stokesI_mask = np.zeros_like(stokesI_map, dtype=np.uint8)
+        stokesI_mask[np.where(stokesI_map > cutoff)] = 1
+        if params.imagemask:
+            mask = np.logical_or(mask, stokesI_mask)
+        else:
+            mask = stokesI_mask
+        del stokesI_map, stokesI_mask
 
     if args.rmclean_mask:
         rmclean_mask = fits.open(args.rmclean_mask)[0].data.squeeze().astype(bool)
@@ -266,6 +278,8 @@ def main():
     if args.phi_rms[0] != args.phi_rms[1]:
         phi_rms_range = phi_range_to_channel_range(args.phi_rms, params)
         print("RMS phi range: {} => {}".format(args.phi_rms, phi_rms_range))
+    else:
+        phi_rms_range = None
 
     if args.rmclean_sigma != 0:
         if phi_rms_range is None:
