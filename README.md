@@ -87,8 +87,3 @@ optional arguments:
                         used in combination with the cutoff value. Eg. 10
 
 ```
-A utility called `mask_map.py` is included to make masks based on a cutoff value in Janskys. This is inteded to be used with a Stokes I map that corresponds to the cube that will be processed. E.g.:
-```
-mask_map.py --cutoff 0.001 imgI.fits
-```
-`pyrmsynth_lite` is licensed under the [GPLv3.](http://www.gnu.org/licenses/gpl.html)
