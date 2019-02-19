@@ -3,16 +3,16 @@
 """
 pyrmsynth_lite, Stephen Bourke
 
-Stripped down from pyrmsynth (Michael Bell, Henrik Junklewitz and Sarrvesh Sridhar)
+Based on pyrmsynth (Michael Bell, Henrik Junklewitz and Sarrvesh Sridhar)
 """
 
-from optparse import OptionParser
+from __future__ import print_function
+import argparse
 from astropy.io import fits
 import numpy as np
 import csv
 import numpy
 import rm_tools as R
-from timeit import default_timer as tic
 import math
 import sys
 
@@ -20,10 +20,11 @@ VERSION = "0.1"
 
 import astropy.version
 if astropy.version.major < 1 or astropy.version.major < 2 and astropy.version.minor < 3:
-    USE_CLOBBER = True
+    overwrite = {'clobber': True}
+    no_overwrite = {'clobber': False}
 else:
-    USE_CLOBBER = False
-
+    overwrite = {'overwrite': True}
+    no_overwrite = {'overwrite': False}
 
 class Params:
     def __init__(self):
@@ -107,7 +108,7 @@ def parse_input_file(infile):
     
     if 'do_weight' in parset:
         params.weight = numpy.loadtxt(params.input_dir + parset['do_weight'])
-        print 'Non-trivial weights enabled! Loaded from ' + parset['do_weight']
+        print('Non-trivial weights enabled! Loaded from ' + parset['do_weight'])
 
     return params
 
@@ -165,45 +166,67 @@ def channel_flags(cube, clip_lev=5):
     return bad_freqs
 
 
+def write_cube(empty_cube, data_selection, data_out, header, out_name):
+    empty_cube[data_selection] = abs(data_out)
+    empty_cube = np.moveaxis(empty_cube, -1, 0)
+    hdu = fits.PrimaryHDU(empty_cube)
+    hdu.header = header
+    hdu.writeto(out_name, **overwrite)
+    empty_cube = np.moveaxis(empty_cube, 0, -1)
+
+
 def main():
     """ Handle all parsing here if started from the command line"""
 
-    parser = OptionParser(usage="%prog <input parameter file>",
-                          version="%prog " + VERSION)
-    parser.add_option("-o", "--outname", type=str,
-                      help="output prefix")
-    parser.add_option("-p", "--save-pol-cube", action="store_true",
-                      dest="save_pol_cube",
-                      help="Save Pol cube", default=False)
-    parser.add_option("-q", "--save-qu-cubes", action="store_true",
-                      dest="save_qu_cubes",
-                      help="Save derotated Q and U cubes", default=False)
-    parser.add_option("-a", "--auto-flag", action="store_true",
-                      dest="auto_flag",
-                      help="auto flag data", default=False)
-    parser.add_option("-x", "--exclude_phi", metavar='phi_range', nargs=2,
-                      type=float, default=(0,0), 
-                      help="exclude this range from moment maps. Eg: -3 1.5")
-    parser.add_option("-n", "--phi_rms", metavar='phi_rms_range', nargs=2,
-                      type=float, default=(0,0), 
-                      help="Make an RMS image from this range. Eg: 100 115")
+    parser = argparse.ArgumentParser(description="Rotation Measure Synthesis tool.")
+    parser.add_argument("-o", "--outname", type=str, help="output prefix")
+    parser.add_argument("-p", "--save-pol-cube", action="store_true",
+                        dest="save_pol_cube", help="Save Pol cube", default=False)
+    parser.add_argument("-q", "--save-qu-cubes", action="store_true",
+                        dest="save_qu_cubes", default=False,
+                        help="Save derotated Q and U cubes")
+    parser.add_argument("-r", "--save-residual-cubes", action="store_true",
+                        dest="save_residual_cubes", default=False,
+                        help="Save residual cubes if cleaning")
+    parser.add_argument("-d", "--save-dirty-cubes", action="store_true",
+                        dest="save_dirty_cubes", default=False,
+                        help="Save dirty cubes if cleaning")
+    parser.add_argument("-a", "--auto-flag", action="store_true",
+                        dest="auto_flag", help="auto flag data", default=False)
+    parser.add_argument("-x", "--exclude_phi", metavar='phi_range', nargs=2,
+                        type=float, default=(0,0), 
+                        help="Exclude this Phi range from 2D maps. Eg: -3 1.5")
+    parser.add_argument("-n", "--phi_rms", metavar='phi_rms_range', nargs=2,
+                        type=float, default=(0,0), 
+                        help="Make a Phi RMS image from this range. Eg: 100 115")
+    parser.add_argument("--single", action="store_true", default=False,
+                        help="Use single precision floats internally. Default: False")
+    parser.add_argument("--double", action="store_true", default=False,
+                        help="Output double precision floats. Default: False")
+    parser.add_argument("--rmclean_mask", type=str, help="Input mask for RMCLEAN")
+    parser.add_argument("param_file", type=str, help="Optional input Parameter file")
+    parser.add_argument("fits_cube", type=str, help="QU FITS cube")
 
-    (options, args) = parser.parse_args()
+    args = parser.parse_args()
 
-    if len(args) != 2:
-        parser.error("Incorrect number of arguments")
+    print("Parsing parameter file...")
+    params = parse_input_file(args.param_file)
 
-    print "Parsing parameter file..."
-    params = parse_input_file(args[0])
+    if args.outname:
+        params.outputfn = args.outname
 
-    if options.outname:
-        params.outputfn = options.outname
+    if args.single:
+        in_dtype = np.complex64
+    else:
+        in_dtype = np.complex128
 
-    timing = []
-    timing.append(tic())
-    
-    print "Loading data..."
-    hdu = fits.open(args[1])[0]
+    if args.double:
+        out_dtype = np.complex128
+    else:
+        out_dtype = np.complex64
+
+    print("Loading data...")
+    hdu = fits.open(args.fits_cube)[0]
     data = hdu.data
     header = hdu.header
     if params.imagemask:
@@ -211,7 +234,13 @@ def main():
     else:
         mask = np.ones(shape=data.shape[2:], dtype=bool)
 
-    if options.auto_flag:
+    if args.rmclean_mask:
+        rmclean_mask = fits.open(args.rmclean_mask)[0].data.squeeze().astype(bool)
+        params.do_clean = True
+    else:
+        rmclean_mask = np.ones(shape=data.shape[2:], dtype=bool)
+
+    if args.auto_flag:
         bad_chans = channel_flags(data)
         flag_weights = np.logical_not(bad_chans).astype(float)
         if params.weight is None:
@@ -228,11 +257,14 @@ def main():
     data_selection = np.where(mask)
     non_masked_data = data[data_selection]
     # Unflagged NaNs will cause RMSynth to return NaNs
-    non_masked_data = np.nan_to_num(non_masked_data.view(dtype=">c8").squeeze()).astype(np.complex128)
+    non_masked_data = np.nan_to_num(non_masked_data.view(dtype=">c8").squeeze()).astype(in_dtype)
+    clean_regions = rmclean_mask[data_selection].squeeze()
     
     params.nu = freqs(header, 4)
     params.dnu = params.nu[1] - params.nu[0]
     rms = R.RMSynth(params.nu, params.dnu, params.phi, params.weight)
+    if params.do_clean:
+        rmc = R.RMClean(rms, params.niter, params.gain, params.cutoff)
 
     rmsfout = numpy.zeros((len(rms.rmsf), 3))
     rmsfout[:, 0] = rms.rmsf_phi
@@ -240,20 +272,28 @@ def main():
     rmsfout[:, 2] = rms.rmsf.imag
     numpy.savetxt(params.outputfn + "_rmsf.txt", rmsfout)
 
-    timing.append(tic())
+    data_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
+    if params.do_clean:
+        dirty_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
+        residual_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
 
-    data_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=np.complex128)
-    print "Doing RM synthesis"
+    print("Doing RM synthesis")
     n = len(non_masked_data)
     width = len(str(n))
     for i in range(len(non_masked_data)):
-        data_out[i] = rms.compute_dirty_image(non_masked_data[i]) 
+        if params.do_clean and clean_regions[i]:
+            rmc.reset()
+            rmc.perform_clean(non_masked_data[i])
+            rmc.restore_clean_map()
+            data_out[i] = rmc.clean_map
+            residual_out[i] = rmc.residual_map
+            dirty_out[i] = rmc.dirty_image
+        else:
+            data_out[i] = rms.compute_dirty_image(non_masked_data[i])
         if i % 100 == 0:
             progress(20, 100.0 * i / n)
-    print ""
+    print("")
 
-    timing.append(tic())
-    
     header_axes_attributes = ["NAXIS", "CTYPE",  "CRVAL", "CRPIX", "CDELT", "CUNIT", "CROTA"]
     for attr in header_axes_attributes:
         attr += "4"
@@ -266,41 +306,45 @@ def main():
     header["CRVAL3"] = params.phi_min
     header["CDELT3"] = params.dphi
 
-    if options.save_pol_cube:
-        cube_out = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA], params.nphi), dtype=data_out.real.dtype)
-        cube_out[data_selection] = abs(data_out)
-        cube_out = np.moveaxis(cube_out, -1, 0)
-        hdu.data = cube_out
-        print "Saving phi cube"
-        if USE_CLOBBER:
-            hdu.writeto(params.outputfn + "_di_p.fits", clobber=True)
-        else:
-            hdu.writeto(params.outputfn + "_di_p.fits", overwrite=True)
 
-        del cube_out
-    
-    if options.save_qu_cubes:
+    if args.save_pol_cube or args.save_qu_cubes or params.do_clean and (args.save_residual_cubes or args.save_dirty_cubes):
         cube_out = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA], params.nphi), dtype=data_out.real.dtype)
-        cube_out[data_selection] = data_out.real
-        cube_out = np.moveaxis(cube_out, -1, 0)
-        hdu.data = cube_out
-        print "Saving q cube"
-        if USE_CLOBBER:
-            hdu.writeto(params.outputfn + "_di_q.fits", clobber=True)
+    else:
+        cube_out = None
+
+    if args.save_pol_cube:
+        print("Saving phi cube")
+        if not params.do_clean:
+            write_cube(cube_out, data_selection, abs(data_out), header, params.outputfn + "_di_p.fits")
         else:
-            hdu.writeto(params.outputfn + "_di_q.fits", overwrite=True)
-    
-        cube_out = np.moveaxis(cube_out, 0, -1)
-        cube_out[data_selection] = data_out.imag
-        cube_out = np.moveaxis(cube_out, -1, 0)
-        hdu.data = cube_out
-        print "Saving u cube"
-        if USE_CLOBBER:
-            hdu.writeto(params.outputfn + "_di_u.fits", clobber=True)
+            write_cube(cube_out, data_selection, abs(data_out), header, params.outputfn + "_clean_p.fits")
+            if args.save_dirty_cubes:
+                print("Saving phi dirty cube")
+                write_cube(cube_out, data_selection, abs(dirty_out), header, params.outputfn + "_di_p.fits")
+            if args.save_residual_cubes:
+                print("Saving phi residual cube")
+                write_cube(cube_out, data_selection, abs(residual_out), header, params.outputfn + "_residual_p.fits")
+
+    if args.save_qu_cubes:
+        print("Saving Q & U cubes")
+        if not params.do_clean:
+            write_cube(cube_out, data_selection, data_out.real, header, params.outputfn + "_di_q.fits")
+            write_cube(cube_out, data_selection, data_out.imag, header, params.outputfn + "_di_u.fits")
         else:
-            hdu.writeto(params.outputfn + "_di_u.fits", overwrite=True)
+            write_cube(cube_out, data_selection, data_out.real, header, params.outputfn + "_clean_q.fits")
+            write_cube(cube_out, data_selection, data_out.imag, header, params.outputfn + "_clean_u.fits")
+            if args.save_dirty_cubes:
+                print("Saving Q & U dirty cubes")
+                write_cube(cube_out, data_selection, dirty_out.real, header, params.outputfn + "_di_q.fits")
+                write_cube(cube_out, data_selection, dirty_out.imag, header, params.outputfn + "_di_u.fits")
+            if args.save_residual_cubes:
+                print("Saving Q & U residual cubes")
+                write_cube(cube_out, data_selection, residual_out.real, header, params.outputfn + "_residual_q.fits")
+                write_cube(cube_out, data_selection, residual_out.imag, header, params.outputfn + "_residual_u.fits")
     
-        del cube_out
+    del cube_out
+    if params.do_clean:
+        del dirty_out, residual_out
     
     for attr in header_axes_attributes:
         attr += "3"
@@ -310,61 +354,45 @@ def main():
     hdu.data = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA]), dtype=data_out.real.dtype)
 
     # RMS Image
-    if options.phi_rms[0] != options.phi_rms[1]:
-        phi0_idx = np.abs(params.phi - options.phi_rms[0]).argmin()
-        phi1_idx = np.abs(params.phi - options.phi_rms[1]).argmin()
+    if args.phi_rms[0] != args.phi_rms[1]:
+        phi0_idx = np.abs(params.phi - args.phi_rms[0]).argmin()
+        phi1_idx = np.abs(params.phi - args.phi_rms[1]).argmin()
         x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
-        print("RMS phi range: {} => {}".format(options.phi_rms, x_phi))
+        print("RMS phi range: {} => {}".format(args.phi_rms, x_phi))
         q_rms = data_out[:,x_phi[0]:x_phi[1]].real.std(axis=1)
         u_rms = data_out[:,x_phi[0]:x_phi[1]].imag.std(axis=1)
         p_rms = 0.5 * (q_rms + u_rms)
-
         hdu.data[data_selection] = p_rms
-        print "Saving rms map"
-        if USE_CLOBBER:
-            hdu.writeto(params.outputfn + "_rms.fits", clobber=True)
-        else:
-            hdu.writeto(params.outputfn + "_rms.fits", overwrite=True)
+        print("Saving rms map")
+        hdu.writeto(params.outputfn + "_rms.fits", **overwrite)
 
     # Exclude range:
-    if options.exclude_phi[0] != options.exclude_phi[1]:
-        phi0_idx = np.abs(params.phi - options.exclude_phi[0]).argmin()
-        phi1_idx = np.abs(params.phi - options.exclude_phi[1]).argmin()
+    if args.exclude_phi[0] != args.exclude_phi[1]:
+        phi0_idx = np.abs(params.phi - args.exclude_phi[0]).argmin()
+        phi1_idx = np.abs(params.phi - args.exclude_phi[1]).argmin()
         x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
-        print("Excluding phi range: {} => {}".format(options.exclude_phi, x_phi))
+        print("Excluding phi range: {} => {}".format(args.exclude_phi, x_phi))
         data_out[:,x_phi[0]:x_phi[1]] = 0
 
+    # 2D maps
     hdu.data[data_selection] = np.amax(abs(data_out), axis=-1)
-    print "Saving int pol map"
-    if USE_CLOBBER:
-        hdu.writeto(params.outputfn + "_polint.fits", clobber=True)
-    else:
-        hdu.writeto(params.outputfn + "_polint.fits", overwrite=True)
+    print("Saving int pol map")
+    hdu.writeto(params.outputfn + "_polint.fits", **overwrite)
 
     indx_max = np.argmax(abs(data_out), axis=-1)
     hdu.data[data_selection] = data_out.real[range(len(data_out)), indx_max]
-    print "Saving q map"
-    if USE_CLOBBER:
-        hdu.writeto(params.outputfn + "_qmap.fits", clobber=True)
-    else:
-        hdu.writeto(params.outputfn + "_qmap.fits", overwrite=True)
+    print("Saving q map")
+    hdu.writeto(params.outputfn + "_qmap.fits", **overwrite)
     
     hdu.data[data_selection] = data_out.imag[range(len(data_out)), indx_max]
-    print "Saving u map"
-    if USE_CLOBBER:
-        hdu.writeto(params.outputfn + "_umap.fits", clobber=True)
-    else:
-        hdu.writeto(params.outputfn + "_umap.fits", overwrite=True)
+    print("Saving u map")
+    hdu.writeto(params.outputfn + "_umap.fits", **overwrite)
     
     header["BUNIT"] = "rad/m/m"
     hdu.data[data_selection] = params.phi[indx_max]
-    print "Saving phi map"
-    if USE_CLOBBER:
-        hdu.writeto(params.outputfn + "_phi.fits", clobber=True)
-    else:
-        hdu.writeto(params.outputfn + "_phi.fits", overwrite=True)
+    print("Saving phi map")
+    hdu.writeto(params.outputfn + "_phi.fits", **overwrite)
     
-    timing.append(tic())
 
 if __name__ == "__main__":
     main()
