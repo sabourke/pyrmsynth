@@ -175,6 +175,12 @@ def write_cube(empty_cube, data_selection, data_out, header, out_name):
     empty_cube = np.moveaxis(empty_cube, 0, -1)
 
 
+def phi_range_to_channel_range(phi_range, params):
+    ch0_indx = np.abs(params.phi - phi_range[0]).argmin()
+    ch1_indx = np.abs(params.phi - phi_range[1]).argmin()
+    return (min(ch0_indx, ch1_indx), max(ch0_indx, ch1_indx)+1)
+
+
 def main():
     """ Handle all parsing here if started from the command line"""
 
@@ -193,17 +199,20 @@ def main():
                         help="Save dirty cubes if cleaning")
     parser.add_argument("-a", "--auto-flag", action="store_true",
                         dest="auto_flag", help="auto flag data", default=False)
-    parser.add_argument("-x", "--exclude_phi", metavar='phi_range', nargs=2,
-                        type=float, default=(0,0), 
+    parser.add_argument("-x", "--exclude-phi", dest="exclude_phi",
+                        metavar='phi_range', nargs=2, type=float, default=(0,0), 
                         help="Exclude this Phi range from 2D maps. Eg: -3 1.5")
-    parser.add_argument("-n", "--phi_rms", metavar='phi_rms_range', nargs=2,
-                        type=float, default=(0,0), 
+    parser.add_argument("-n", "--phi-rms", dest="phi_rms", type=float,
+                        metavar='phi_rms_range', nargs=2, default=(0,0), 
                         help="Make a Phi RMS image from this range. Eg: 100 115")
     parser.add_argument("--single", action="store_true", default=False,
                         help="Use single precision floats internally. Default: False")
     parser.add_argument("--double", action="store_true", default=False,
-                        help="Output double precision floats. Default: False")
-    parser.add_argument("--rmclean_mask", type=str, help="Input mask for RMCLEAN")
+                        help="Output double precision floats. Default: False. If neither --single or --double is specified, use double precision internally and write out single precision.")
+    parser.add_argument("--rmclean-mask", type=str, help="Input mask for RMCLEAN")
+    parser.add_argument("--rmclean-sigma", dest="rmclean_sigma",
+                        type=float, default=0.0,
+                        help="Clean to RMCLEAN_SIGMA times the phi noise. This is used in combination with the cutoff value. Eg. 10")
     parser.add_argument("param_file", type=str, help="Optional input Parameter file")
     parser.add_argument("fits_cube", type=str, help="QU FITS cube")
 
@@ -248,6 +257,20 @@ def main():
         else:
             params.weight = np.minimum(params.weight, flag_weights)
     
+    if args.exclude_phi[0] != args.exclude_phi[1]:
+        exclude_phi_range = phi_range_to_channel_range(args.exclude_phi, params)
+        print("Excluding phi range from 2D maps: {} => {}".format(args.exclude_phi, exclude_phi_range))
+    else:
+        exclude_phi_range = None
+
+    if args.phi_rms[0] != args.phi_rms[1]:
+        phi_rms_range = phi_range_to_channel_range(args.phi_rms, params)
+        print("RMS phi range: {} => {}".format(args.phi_rms, phi_rms_range))
+
+    if args.rmclean_sigma != 0:
+        if phi_rms_range is None:
+            args.error("--phi-rms required for --rmclean-sigma")
+
     # Survey cubes will be ordered: [Freqs, Stokes, Dec, RA]
     data = np.moveaxis(data, 0, -1) # Move Freq to end
     data = np.moveaxis(data, 0, -1) # Move Stokes to end
@@ -283,7 +306,14 @@ def main():
     for i in range(len(non_masked_data)):
         if params.do_clean and clean_regions[i]:
             rmc.reset()
-            rmc.perform_clean(non_masked_data[i])
+            rmc.residual_map = rms.compute_dirty_image(non_masked_data[i])
+            rmc.dirty_image = rmc.residual_map
+            if args.rmclean_sigma != 0:
+                q_rms = rmc.residual_map[phi_rms_range[0]:phi_rms_range[1]].real.std()
+                u_rms = rmc.residual_map[phi_rms_range[0]:phi_rms_range[1]].imag.std()
+                cutoff = args.rmclean_sigma * 0.5 * (q_rms + u_rms)
+                rmc.cutoff = max(cutoff, params.cutoff)
+            rmc.perform_clean()
             rmc.restore_clean_map()
             data_out[i] = rmc.clean_map
             residual_out[i] = rmc.residual_map
@@ -354,25 +384,16 @@ def main():
     hdu.data = np.full(fill_value=np.NaN, shape=(data.shape[DEC], data.shape[RA]), dtype=data_out.real.dtype)
 
     # RMS Image
-    if args.phi_rms[0] != args.phi_rms[1]:
-        phi0_idx = np.abs(params.phi - args.phi_rms[0]).argmin()
-        phi1_idx = np.abs(params.phi - args.phi_rms[1]).argmin()
-        x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
-        print("RMS phi range: {} => {}".format(args.phi_rms, x_phi))
-        q_rms = data_out[:,x_phi[0]:x_phi[1]].real.std(axis=1)
-        u_rms = data_out[:,x_phi[0]:x_phi[1]].imag.std(axis=1)
+    if phi_rms_range != None:
+        q_rms = data_out[:,phi_rms_range[0]:phi_rms_range[1]].real.std(axis=1)
+        u_rms = data_out[:,phi_rms_range[0]:phi_rms_range[1]].imag.std(axis=1)
         p_rms = 0.5 * (q_rms + u_rms)
         hdu.data[data_selection] = p_rms
         print("Saving rms map")
         hdu.writeto(params.outputfn + "_rms.fits", **overwrite)
 
-    # Exclude range:
-    if args.exclude_phi[0] != args.exclude_phi[1]:
-        phi0_idx = np.abs(params.phi - args.exclude_phi[0]).argmin()
-        phi1_idx = np.abs(params.phi - args.exclude_phi[1]).argmin()
-        x_phi = (min(phi0_idx, phi1_idx), max(phi0_idx, phi1_idx)+1)
-        print("Excluding phi range: {} => {}".format(args.exclude_phi, x_phi))
-        data_out[:,x_phi[0]:x_phi[1]] = 0
+    if exclude_phi_range != None:
+        data_out[:,exclude_phi_range[0]:exclude_phi_range[1]] = 0
 
     # 2D maps
     hdu.data[data_selection] = np.amax(abs(data_out), axis=-1)
