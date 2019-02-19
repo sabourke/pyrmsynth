@@ -181,6 +181,16 @@ def phi_range_to_channel_range(phi_range, params):
     return (min(ch0_indx, ch1_indx), max(ch0_indx, ch1_indx)+1)
 
 
+def check_cube_format(header):
+    try:
+        assert header["CTYPE1"].startswith("RA")
+        assert header["CTYPE2"].startswith("DEC")
+        assert header["CTYPE3"].startswith("STOKES")
+        assert header["CTYPE4"].startswith("FREQ")
+    except AssertionError:
+        raise ValueError("Input cube must be in order: RA,DEC,STOKES,FREQ")
+
+
 def main():
     """ Handle all parsing here if started from the command line"""
 
@@ -240,6 +250,8 @@ def main():
     hdu = fits.open(args.fits_cube)[0]
     data = hdu.data
     header = hdu.header
+    check_cube_format(header)
+
     if params.imagemask:
         mask = fits.open(params.imagemask)[0].data.squeeze().astype(bool)
     else:
