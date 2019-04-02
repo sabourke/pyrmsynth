@@ -209,13 +209,13 @@ def main():
                         help="Save dirty cubes if cleaning")
     parser.add_argument("-a", "--auto-flag", action="store_true",
                         dest="auto_flag", help="auto flag data", default=False)
-    parser.add_argument("-m", "--auto-mask", dest="auto_mask", type=str, nargs=2,
+    parser.add_argument("-m", "--auto-mask", dest="auto_mask", type=str, nargs=2, metavar=('MASK_FILE', 'CUTOFF'),
                         help="Use stokes I map and cutoff value in Jy. This is in addition to a regular mask. I.E. it is OR'd with the regular mask if provided. Eg. map_i.fits 0.001")
     parser.add_argument("-x", "--exclude-phi", dest="exclude_phi",
-                        metavar='phi_range', nargs=2, type=float, default=(0,0), 
+                        metavar=('PHI_LOW', 'PHI_HIGH'), nargs=2, type=float, default=(0,0), 
                         help="Exclude this Phi range from 2D maps. Eg: -3 1.5")
     parser.add_argument("-n", "--phi-rms", dest="phi_rms", type=float,
-                        metavar='phi_rms_range', nargs=2, default=(0,0), 
+                        metavar=('PHI_LOW', 'PHI_HIGH'), nargs=2, default=(0,0), 
                         help="Make a Phi RMS image from this range. Eg: 100 115")
     parser.add_argument("--single", action="store_true", default=False,
                         help="Use single precision floats internally. Default: False")
@@ -323,8 +323,14 @@ def main():
 
     data_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
     if params.do_clean:
-        dirty_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
-        residual_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
+        if args.save_dirty_cubes:
+            dirty_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
+        else:
+            dirty_out = None
+        if args.save_residual_cubes:
+            residual_out = np.empty(shape=(len(non_masked_data), params.nphi), dtype=out_dtype)
+        else:
+            residual_out = None
 
     print("Doing RM synthesis")
     n = len(non_masked_data)
@@ -342,8 +348,10 @@ def main():
             rmc.perform_clean()
             rmc.restore_clean_map()
             data_out[i] = rmc.clean_map
-            residual_out[i] = rmc.residual_map
-            dirty_out[i] = rmc.dirty_image
+            if args.save_residual_cubes:
+                residual_out[i] = rmc.residual_map
+            if args.save_dirty_cubes:
+                dirty_out[i] = rmc.dirty_image
         else:
             data_out[i] = rms.compute_dirty_image(non_masked_data[i])
         if i % 100 == 0:
