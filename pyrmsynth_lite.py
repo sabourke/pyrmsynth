@@ -167,7 +167,7 @@ def channel_flags(cube, clip_lev=5):
 
 
 def write_cube(empty_cube, data_selection, data_out, header, out_name):
-    empty_cube[data_selection] = abs(data_out)
+    empty_cube[data_selection] = data_out
     empty_cube = np.moveaxis(empty_cube, -1, 0)
     hdu = fits.PrimaryHDU(empty_cube)
     hdu.header = header
